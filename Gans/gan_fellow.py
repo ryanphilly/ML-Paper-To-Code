@@ -1,5 +1,4 @@
 # Goals
-
 # Create a Generator network that learns the underliying data distribution
 # and generates a sample.
 
