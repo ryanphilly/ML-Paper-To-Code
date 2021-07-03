@@ -20,6 +20,7 @@ def weights_init(module):
 
 class Gen(nn.Module):
   def __init__(self, noise_dim, output_channels):
+    super(Gen, self).__init__()
     self.linear = nn.Sequential(
       nn.Linear(noise_dim, 7*7*256),
       nn.BatchNorm1d(7*7*256),
@@ -42,10 +43,10 @@ class Gen(nn.Module):
     data = self.linear(data).view(-1, 256, 7, 7)
     return self.upsample(data)
 
-def noise(batch_size, n_features=128, device='cuda'):
+def noise(batch_size, n_features=100, device='cuda'):
   """creates a noise matrix for a given batch size"""
   return Variable(torch.randn(batch_size, n_features)).to(device)
 
-noise = noise(64)
-generator = Gen(noise.shape[1], 1)
-print(generator(noise))
+noisee = noise(64)
+generator = Gen(noisee.shape[1], 1).to('cuda')
+print(generator(noisee))
