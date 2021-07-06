@@ -27,7 +27,8 @@ def upsample_block(channels_in: int, channels_out: int, kernel_size: int=4) -> n
 
 class UNet(nn.Module):
   """
-  UNet is an encoder-decoder network that utilizes skip connections(helps with bottleneck issue)
+  UNet is an encoder-decoder network that utilizes
+  skip connections(helps with bottleneck issue)
   """
   def __init__(self, input_channels: int, output_channels: int, generator_feats: int):
     super(UNet, self).__init__()
@@ -43,7 +44,7 @@ class UNet(nn.Module):
       downsample_block(generator_feats*8, generator_feats*8),
       downsample_block(generator_feats*8, generator_feats*8)])
 
-    # functional decoder (mirrors encoder except the
+    # decoder (mirrors encoder except the
     # input channels after first layer are doubled due
     # to skip connection concatenation)
     self.decoder = nn.ModuleList([
@@ -60,19 +61,15 @@ class UNet(nn.Module):
     
   def forward(self, x):
     skip_connections = list()
-
     for i, layer in enumerate(self.encoder):
       x = layer(x)
       if (i != len(self.encoder)-1):
         skip_connections.append(x)
 
     skip_connections.reverse()
-
     for i, layer in enumerate(self.decoder):
-      if i == 0:
-        x = layer(x)
-      else:
-        x = layer(torch.cat(x, skip_connections[i-1]))
+        x = layer(x) if i == 0 \
+              else layer(torch.cat(x, skip_connections[i-1]))
 
     return x
 
