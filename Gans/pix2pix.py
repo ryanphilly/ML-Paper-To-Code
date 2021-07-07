@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torch.nn.modules import module
 
 '''
 Paper-to-Code
@@ -10,19 +11,36 @@ Image-to-Image Translation with Conditional Adversarial Networks
       convolution-BatchNorm-ReLu
 '''
 
-def downsample_block(channels_in: int, channels_out: int, kernel_size: int=4) -> nn.Sequential:
-  '''Single layer of the UNet encoder'''
-  return nn.Sequential(
-    nn.Conv2d(channels_in, channels_out, kernel_size, stride=2),
-    nn.BatchNorm2d(channels_out),
-    nn.LeakyReLU(0.2))
+def sample_block(type: str, # 'up' or 'down' (case sens)
+                 channels_in: int,
+                 channels_out: int,
+                 kernel_size: int=4,
+                 padding: int=1,
+                 batch_norm: bool=True,
+                 tanh: bool=False):
+  modules = list()
+  if type == 'up':
+    modules.append(nn.ConvTranspose2d(
+      channels_in,
+      channels_out,
+      kernel_size,
+      stride=2, padding=padding))
+  else:
+    modules.append(nn.Conv2d(
+      channels_in,
+      channels_out,
+      kernel_size,
+      stride=2, padding=padding))
 
-def upsample_block(channels_in: int, channels_out: int, kernel_size: int=4) -> nn.Sequential:
-  '''Single layer of the UNet decoder'''
-  return nn.Sequential(
-    nn.ConvTranspose2d(channels_in, channels_out, kernel_size, stride=2),
-    nn.BatchNorm2d(channels_out),
-    nn.ReLU())
+  if batch_norm:
+    modules.append(nn.BatchNorm2d(channels_out))
+
+  if type == 'up':
+    modules.append(nn.ReLU() if not tanh else nn.Tanh())
+  else:
+    modules.append(nn.LeakyReLU(0.2))
+
+  return nn.Sequential(*modules)
 
 
 class UNet(nn.Module):
@@ -34,29 +52,29 @@ class UNet(nn.Module):
     super(UNet, self).__init__()
     # functional encoder (allows skip connections)
     self.encoder = nn.ModuleList([
-      downsample_block(input_channels, generator_feats),
-      downsample_block(generator_feats, generator_feats*2),
-      downsample_block(generator_feats*2, generator_feats*4),
-      downsample_block(generator_feats*4, generator_feats*8),
+      sample_block('down', input_channels, generator_feats, batch_norm=False),
+      sample_block('down', generator_feats, generator_feats*2),
+      sample_block('down', generator_feats*2, generator_feats*4),
+      sample_block('down', generator_feats*4, generator_feats*8),
 
-      downsample_block(generator_feats*8, generator_feats*8),
-      downsample_block(generator_feats*8, generator_feats*8),
-      downsample_block(generator_feats*8, generator_feats*8),
-      downsample_block(generator_feats*8, generator_feats*8)])
+      sample_block('down', generator_feats*8, generator_feats*8),
+      sample_block('down', generator_feats*8, generator_feats*8),
+      sample_block('down', generator_feats*8, generator_feats*8),
+      sample_block('down', generator_feats*8, generator_feats*8)])
 
     # decoder (mirrors encoder except the
-    # input channels after first layer are doubled due
+    # input channels after the first layer are doubled due
     # to skip connection concatenation)
     self.decoder = nn.ModuleList([
-      upsample_block(generator_feats*8, generator_feats*8),
-      upsample_block(generator_feats*8*2, generator_feats*8),
-      upsample_block(generator_feats*8*2, generator_feats*8),
-      upsample_block(generator_feats*8*2, generator_feats*8),
+      sample_block('up', generator_feats*8, generator_feats*8),
+      sample_block('up', generator_feats*8*2, generator_feats*8),
+      sample_block('up', generator_feats*8*2, generator_feats*8),
+      sample_block('up', generator_feats*8*2, generator_feats*8),
 
-      upsample_block(generator_feats*8*2, generator_feats*4),
-      upsample_block(generator_feats*4*2, generator_feats*2),
-      upsample_block(generator_feats*2*2, generator_feats),
-      upsample_block(generator_feats*2, output_channels)
+      sample_block('up', generator_feats*8*2, generator_feats*4),
+      sample_block('up', generator_feats*4*2, generator_feats*2),
+      sample_block('up', generator_feats*2*2, generator_feats),
+      sample_block('up', generator_feats*2, output_channels, tanh=True)
     ])
     
   def forward(self, x):
@@ -67,14 +85,16 @@ class UNet(nn.Module):
         skip_connections.append(x)
 
     skip_connections.reverse()
+    
     for i, layer in enumerate(self.decoder):
-        x = layer(x) if i == 0 \
-              else layer(torch.cat(x, skip_connections[i-1]))
+      x = layer(x) if i == 0 \
+        else layer(torch.cat((x, skip_connections[i-1]), dim=1))
 
     return x
 
+x = torch.randn((3, 3, 256, 256)).to('cuda')
+gen = UNet(3, 3, 64).to('cuda:0')
 
-gen = UNet(1, 3).to('cuda:0')
 
 
     
